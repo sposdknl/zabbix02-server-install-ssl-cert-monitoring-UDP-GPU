@@ -1,70 +1,76 @@
-[![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-22041afd0340ce965d47ae6ef1cefeee28c7c493a6346c4f15d667ab976d596c.svg)](https://classroom.github.com/a/Nv3bt8H1)
+[![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-22041afd0340ce965d47ae6ef1cefeee28c7c493a6346c4f15d667ab976d596c.svg)](https://classroom.github.com/a/Nv3bt8H1)  
 [![Open in Visual Studio Code](https://classroom.github.com/assets/open-in-vscode-2e0aaae1b6195c2367325f4f02e2d04e9abb55f0b24a779b69b11b9e10269abc.svg)](https://classroom.github.com/online_ide?assignment_repo_id=21957122&assignment_repo_type=AssignmentRepo)
-# Instalace Zabbix server 
-Independent work - Zabbix server installation using Vagrant and automation
 
-Samostatná práce - instalace Zabbix serveru pomocí Vagrant a automatizace
+![Vagrant-Zabbix_Server](./Images/Vagrant-zabbix-browser.png)
 
-## Zadání: Instalace Zabbix serveru a agenta pomocí Vagrant
+# Postup instalace pomocí Vagrant provisioningu
 
-Úvod:
-V tomto úkolu budete instalovat Zabbix server. Vaším cílem je nainstalovat Zabbix server i agenta.
-Vaše samostatná práce bude realizovana pomoci automatizace procesu za pomocí
-shell skriptů a různých nástrojů, což bude bodově zvýhodněno.
+Raw scripts:
+```bash
+#!/bin/bash
 
-## 1. Příprava projektu
+# Package update and upgrade
+sudo apt-get update
+sudo apt-get upgrade -y
 
-- Zprovozněte si svůj studentský repozitář na GitHub Classroom - zabbix02. Přidejte do repozitáře všechny soubory, které budete potřebovat (např. Vagrantfile, provisioning skripty, obrázky, dokumentaci, atd.).
+# Zabbix prepare installation
+curl -sL "https://repo.zabbix.com/zabbix/7.0/debian/pool/main/z/zabbix-release/zabbix-release_latest_7.0+debian13_all.deb" -o ./zabbix-release_latest.deb
+sudo dpkg -i ./zabbix-release_latest.deb
+sudo apt-get update
 
-### Příprava prostředí
+# Zabbix installation
+sudo apt-get install -y mariadb-server mariadb-client apache2 php libapache2-mod-php
+sudo apt-get install -y zabbix-server-mysql zabbix-frontend-php zabbix-apache-conf zabbix-sql-scripts zabbix-agent2
 
-- Vytvořte adresář pro server a do nej Vagrantfile, který, vytvoří virtuální server přidejte je do github repozitáře. Nezapomenou na .gitignore pro soubory a adresáře, které nemají být součástí repo.
-- Specifikuje základní parametry (např. RAM 2GB, počet CPU 2, síťové nastavení portforward 22 a 80).
-- Linuxovou distribuci zvolte z examples. Jiná distra než Debian a Ubuntu budou bodově zvýhodněna :-)
-- Pokud použijete provisioning nástroje (např. Bash, Ansible), přidejte je do repozitáře.
+# Database installation
+sudo mariadb < /vagrant/mariadb.sql
+zcat /usr/share/zabbix-sql-scripts/mysql/server.sql.gz | sudo mariadb --default-character-set=utf8mb4 zabbix
+sudo mariadb -e "set global log_bin_trust_function_creators = 0;"
 
-## 2. Instalace Zabbixu 7.0 LTS
+# Edit configuration
+sudo sed -i '/# DBPassword=/a DBPassword=zabbix' /etc/zabbix/zabbix_server.conf
 
-- Nainstalujte a nastavte webový server (např. Apache/Nginx)
-- Nainstalujte databázi (např. MySQL/MariaDB/PostgreSQL) případně i s TimescaleDB
-- Stáhněte a nainstalujte Zabbix server a jeho komponenty
-- Nakonfigurujte přístup na webové rozhraní
+# Restart services
+systemctl restart zabbix-server zabbix-agent2 apache2
+systemctl enable zabbix-server zabbix-agent2 apache2
+```
+```sql
+create database zabbix character set utf8mb4 collate utf8mb4_bin;
+create user zabbix@localhost identified by 'zabbix';
+grant all privileges on zabbix.* to zabbix@localhost;
+set global log_bin_trust_function_creators = 1;
+```
 
-- Nainstalujte Zabbix agent2.
-- Připojte agenta k serveru.
+Postup:
 
-Zaznamenejte všechny kroky instalace do dokumentace formou README.md. Ověřte, že agent2 komunikuje se serverem a data jsou viditelná v Zabbix webovém rozhraní.
+- Nejprve aktualizuji balíčkovací systém
+- Stáhnu aktuální .deb balíček z oficiálního `https://repo.zabbix.com/`
+- Nainstaluji nově stažený balíček do systému a aktualizuji balíčky
+- Nainstaluji potřebné balíčky a tooly před samotnou instalací zabbix serveru a agenta
+- Nastavíme MariaDB databázi a připravíme ji na Zabbix.
+- Nakonec restartujeme zabbix service, aby si znovu načetli konfiguraci a jiné změny
 
-## 3. Monitoring
-### Monitorujte SSL certifikát školního webu
-- Importujte hosta sposdk.cz - sposdk.cz_hosts.yaml
-- Zkontrolujte, že se Certifikát https://sposdk.cz monitoruje (Latest data) uložte screen obrazovky do repo
+Poté se můžete normálně přihlásit k `http://localhost:8000/zabbix` a donastavit sledování webového SSL/TLS certifikátu pomocí webového prohlížeče.
 
-## 4. Dokumentace
-### V repozitáři vytvořte soubor README.md, kde popíšete
-- Postup Vaší instalace (automatizovanou variantu)
-- Způsob spuštění virtuálních strojů pomocí Vagrantu
-- Dále pak ověření funkčnosti Zabbixu (procesy, logy atd.)
+# Způsob spuštění Vagrant VM za pomocí VirtualBoxu
 
-## 5. Přiložte snímky obrazovky
-- Běh Zabbix serveru a agenta (logy, procesy, htop, ps, btop).
-- Webové rozhraní Zabbixu. (Každý bude mít svůj Zabbix podepsaný) - proměnná php - $ZBX_SERVER_NAME v zabbix.conf.php
-- Snímky obrazovek budou součástí Vašeho repository adresář ./Images
+Nejprve se musíte ujistit, zda máte Vagrant vůbec nainstalovaný. (Jestli ne, navštivte stránku `https://developer.hashicorp.com/vagrant/install`)
 
-## 6. Důležité soubory
+Zda-li máme Vagrant nainstalovaný, tak si připravíme Vagrantfile, který bude mít zapnutý port forwarding portu 8000 pro HTTP z Apache2.  
+Také se musí přidat master provisioning, aby se nám skript vůbec spustil (na automatickou instalaci).
 
-| File config                   | Komponenta      |
-|-------------------------------|-----------------|
-| Vagrantfile                   | Vagrant         |
-| zabbix_server.conf            | Zabbix server   |
-| zabbix_agent2.conf            | Zabbix agent    |
-| zabbix.conf.php               | Zabbix frontend |
-| apache.conf                   | Apache          |
-| mysql.ini                     | MySQL/MariaDB         |
+Poté stačí spustit příkaz `vagrant.exe up` a Vagrant za vás vše udělá.  
+A ve svém oblíbeném prohlížeči si otevřeme adresu `http://localhost:8000/zabbix`.
 
+# Ověření funkčnosti
 
-## 7. Odevzdání
-- Nahrajte svůj projekt do svého GitHub Classroom repozitáře, nezapomenout .gitignore
-- Zkontrolujte, že vše funguje podle zadání - http://localhost:8080 nebo http://localhost:8080/zabbix/ (číslo portu je na Vás)
-- Odevzdejte link na Váš repozitář do Teams
-- Do ./Images vložte screeeny obrazovek (ps, htop, Zabbix Web GUI, monitoring certifikátu školy - Latest Data)
+Příkazy na ověření:
+```bash
+htop
+systemctl status zabbix-server.service
+systemctl status zabbix-agent2.service
+```
+
+- htop - Zobrazí běžící procesy (zabbix-server, zabbix-agent2, mariadb, apache2/httpd)
+- systemctl - Systémové zobrazení stavu procesu na pozadí (řádek: `Active: Active (running)`)
+- další - Po otevření a úspěšné dokonfiguraci Zabbix serveru je asi trochu logické, že běží... :)
